@@ -15,7 +15,8 @@ Packages <- c("tidyverse",
               "VIM",
               "caret", 
               "MLmetrics",
-              "Metrics")
+              "Metrics",
+              "pROC")
 
 invisible(lapply(Packages, function(pkg) {
   if (!requireNamespace(pkg, quietly = TRUE)){ 
@@ -42,20 +43,23 @@ table(train_hogares$Pobre)
 preproces_personas <- function(data,...){
   data<-data %>% mutate(
     mujer = ifelse(P6020==2,1,0),
-    menor_de_edad = ifelse(P6040<=6,1,0),
+    menor_de_edad = ifelse(P6040 <= 16, 1, 0),
+    adulto_mayor = ifelse(P6040 >= 60, 1, 0),
     regimen_salud = ifelse(P6100==4,3,P6100),
+    regimen_salud = ifelse(is.na(regimen_salud), 3, regimen_salud),
     EducLevel = ifelse(P6210==9,0,P6210),
     Jefe_H = ifelse(P6050==1,1,0),
     ocupado = ifelse(is.na(Oc),0,1),
     desocupado = ifelse(is.na(Des),0,1),
     Inactivo = ifelse(is.na(Ina),0,1),
     Tipo_primer_empleo = ifelse(P6430==9,0,P6430),
+    Tipo_primer_empleo = ifelse(is.na(Tipo_primer_empleo),1,Tipo_primer_empleo),
     segundo_empleo = ifelse(P7040==1,1,0),
     segundo_empleo = ifelse(is.na(segundo_empleo), 0, segundo_empleo),
     Recibio_horasextra = ifelse(P6510==1,1,0),
-    Recibio_horasextra = ifelse(is.na(Recibio_horasextra), 0, Recibio_horasextra)
-  ) %>%
-    select(id, mujer, menor_de_edad, regimen_salud, EducLevel, Jefe_H, 
+    Recibio_horasextra = ifelse(is.na(Recibio_horasextra), 0, Recibio_horasextra)) %>%
+    rename(edad = P6040) %>%
+    select(id, mujer, edad, menor_de_edad, adulto_mayor, regimen_salud, EducLevel, Jefe_H, 
            ocupado,desocupado, Inactivo,Tipo_primer_empleo,segundo_empleo,
            Recibio_horasextra) 
   return(data)
@@ -66,14 +70,13 @@ test_personas <- preproces_personas(test_personas)
 
 # generamos variables agregadas con base personas:
 
-
-
 preproces_personas_agregacion <- function(data,...){
   agregacion <- data %>%
     group_by(id)%>%
     summarise(
       num_mujeres = sum(mujer,na.rm = TRUE),
       num_menores = sum(menor_de_edad, na.rm = TRUE),
+      num_adulto_mayor = sum(adulto_mayor, na.rm = TRUE),
       maxEducLevel = max(EducLevel, na.rm = TRUE),
       num_ocupados = sum(ocupado, na.rm=TRUE),
       num_desocupados = sum(desocupado, na.rm = TRUE),
@@ -86,11 +89,12 @@ preproces_personas_agregacion <- function(data,...){
   por_hogares_jefeh <- data %>%
       filter(Jefe_H==1) %>%
       select(id,mujer,regimen_salud,EducLevel,Jefe_H, ocupado,Inactivo,
-             desocupado,Tipo_primer_empleo,segundo_empleo,
+             desocupado,Tipo_primer_empleo,segundo_empleo,edad,
              Recibio_horasextra)%>%
       rename(Jefe_H_mujer=mujer,
              Jefe_regimen_salud=regimen_salud,
              Jefe_EducLevel=EducLevel,
+             Jefe_edad=edad,
              Jefe_ocupado=ocupado,
              Jefe_Inactivo=Inactivo,
              Jefe_desocupado=desocupado,
@@ -117,7 +121,7 @@ preproces_hogares <- function(data,...){
     arrienda=ifelse(P5090==3,1,0)
   ) %>%
     select(id, Clase,Dominio,arrienda,Nper,
-           Npersug, any_of("Pobre"))
+           any_of("Pobre"))
   return(data)
 }
 
@@ -223,7 +227,10 @@ TEST<- TEST %>%
   )
 
 
-
-# Eliminamos los valores faltantes de Jefe_Tipo_primer_empleo.
-TRAIN <- TRAIN %>% drop_na(Jefe_Tipo_primer_empleo,Jefe_regimen_salud)
-TEST <- TEST %>% drop_na(Jefe_Tipo_primer_empleo, Jefe_regimen_salud)
+corrijo_na <- function(data, ...) {
+  data <- data %>%
+    mutate(Jefe_regimen_salud= ifelse(is.na(Jefe_regimen_salud), 3, Jefe_regimen_salud))
+  return(data)
+}
+TRAIN <- corrijo_na(TRAIN)
+TEST <- corrijo_na(TEST)
