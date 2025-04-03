@@ -1,0 +1,65 @@
+#Modelo 5: Random Forest
+
+# Grid de combinaciones de hiperparámetros
+
+grid_rf <- expand.grid(
+  mtry = c(5, 6, 8),            
+  splitrule = "gini",           
+  min.node.size = c(10, 20))  
+
+#Modelo a utilizar: 
+
+modelo_RF1=Pobre~Nper+num_ocupados+arrienda+num_menores+num_mayores+maxEducLevel+Jefe_regimen_salud+Jefe_Tipo_primer_empleo+Jefe_segundo_empleo+Jefe_H_edad
+
+# Entrenamos Random forest en el sub_TRAIN
+
+modelo5_rf_sub <- train(modelo_RF1, 
+                       data = sub_TRAIN, 
+                       method = "ranger",           
+                       metric = "F",               
+                       trControl = ctrl,          
+                       tuneGrid = grid_rf,    
+                       num.trees = 500)             
+
+modelo5_rf_sub
+
+
+# Predecir los class labels en sub_TEST
+TEST_preds <- predict(modelo5_rf_sub, newdata = sub_TEST, type = "raw")
+
+# F1 score fuera de muestra
+f1_score <- calculate_f1(true_labels = sub_TEST$Pobre, predicted_labels = TEST_preds)
+print(paste("F1-score Random Forest:", f1_score))  #0.552
+
+
+
+
+set.seed(0987523)
+
+# Ahora lo entrenamos utilizando todos los datos
+
+modelo5_rf <- train(modelo_RF1, 
+                    data = TRAIN, 
+                    method = "ranger",           
+                    metric = "F",               
+                    trControl = ctrl,          
+                    tuneGrid = grid_rf,    
+                    num.trees = 500)
+
+modelo5_rf
+
+# Submission
+predictSample <- TEST %>% 
+  mutate(pobre_lab = predict(modelo5_rf, newdata = TEST, type = "raw")) %>% 
+  select(id, pobre_lab)
+
+head(predictSample)
+
+predictSample <- predictSample %>% 
+  mutate(pobre_lab = ifelse(pobre_lab == "Yes", 1, 0)) %>% 
+  select(id, pobre_lab)
+
+head(predictSample)
+
+name <- paste0("C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 2/Data/submissions/RF_mtry_6_n500.csv") 
+write.csv(predictSample, name, row.names = FALSE)
