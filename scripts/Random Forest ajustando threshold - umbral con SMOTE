@@ -1,0 +1,83 @@
+#Modelo 6: Random Forest ajustando threshold - umbral con SMOTE 
+
+#OJO: Acá se pone el método de sampling de SMOTE que sirve para el modelo
+
+ctrl_smote <- trainControl(method = "cv",
+                           number = 5,                  
+                           classProbs = TRUE,           
+                           summaryFunction = prSummary,
+                           savePredictions = TRUE,      
+                           verboseIter = TRUE,
+                           sampling = "smote")
+
+
+grid_rf <- expand.grid(
+  mtry = 6,            
+  splitrule = "gini",           
+  min.node.size = 20)  
+
+
+#Modelo a utilizar: 
+
+modelo_RF1=Pobre~Nper+num_ocupados+arrienda+num_menores+num_mayores+maxEducLevel+Jefe_regimen_salud+Jefe_Tipo_primer_empleo+Jefe_segundo_empleo+Jefe_H_edad
+
+# Entrenamos Random forest en el sub_TRAIN
+
+modelo6_rf_sub <- train(modelo_RF1, 
+                        data = sub_TRAIN, 
+                        method = "ranger",           
+                        metric = "F",               
+                        trControl = ctrl_smote,          
+                        tuneGrid = grid_rf,    
+                        num.trees = 500,
+                        importance = "impurity")             
+
+modelo6_rf_sub
+
+# Predecir probabilidades en el sub_TEST
+TEST_probs <- predict(modelo6_rf_sub, newdata = sub_TEST, type = "prob")[, "Yes"]
+
+#Ahora vamos a buscar el umbral óptimo
+
+umbrales <- seq(0.05, 0.95, by = 0.01)  
+f1_scores <- sapply(umbrales, calculate_f1_manual, true_labels = sub_TEST$Pobre, predicted_probs = TEST_probs)
+
+# Cuadramos el umbral ahora mirando el F1
+umbral_optimo <- umbrales[which.max(f1_scores)]
+f1_optimo <- max(f1_scores)
+
+# Miramos el umbral y el F1 optimo
+
+print(paste("Umbral Óptimo:", umbral_optimo))       # 0.45
+print(paste("Socre F1 de acuerdo al umbral óptimo :", f1_optimo))  # 0.623
+
+# Entrenamos ahora con todos los datos
+
+modelo6_rf <- train(modelo_RF1, 
+                    data = TRAIN, 
+                    method = "ranger",           
+                    metric = "F",               
+                    trControl = ctrl_smote,          
+                    tuneGrid = grid_rf,    
+                    num.trees = 500,
+                    importance = "impurity")   
+
+modelo6_rf
+
+# Ajustar las probabilidades y el umbral para la submission
+
+test_probs <- predict(modelo6_rf, newdata = TEST, type = "prob")[, "Yes"]
+
+test_preds_fin <- ifelse(test_probs >= umbral_optimo, "Yes", "No")
+
+#Ahora si se propara la submission
+
+predictSample <- TEST %>% 
+  mutate(pobre_lab = ifelse(test_preds_fin == "Yes", 1, 0)) %>% 
+  select(id,pobre_lab)
+
+head(predictSample)
+
+name <- paste0("C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 2/Data/submissions/RFajus_smote_mtry_6_n500.csv") 
+write.csv(predictSample, name, row.names = FALSE)
+
