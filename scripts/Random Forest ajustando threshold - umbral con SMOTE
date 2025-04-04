@@ -1,3 +1,21 @@
+#Crear submuestras con el fin de poder hacer la validación cruzada en el mismo código antes de mandar la submission
+
+inTRAIN <- createDataPartition(
+  y = TRAIN$Pobre,  
+  p = 0.7,          # 70% of the data for training
+  list = FALSE      
+)
+
+# sub_train (70%) and sub_test (30%)
+sub_TRAIN <- TRAIN[inTRAIN, ]
+sub_TEST  <- TRAIN[-inTRAIN, ]
+
+# Verificar la proporción de "Pobre" en las submuestras
+prop.table(table(TRAIN$Pobre))
+prop.table(table(sub_TRAIN$Pobre))
+prop.table(table(sub_TEST$Pobre))
+
+
 #Modelo 6: Random Forest ajustando threshold - umbral con SMOTE 
 
 #OJO: Acá se pone el método de sampling de SMOTE que sirve para el modelo
