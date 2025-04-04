@@ -1,0 +1,68 @@
+#Crear submuestras con el fin de poder hacer la validación cruzada en el mismo código antes de mandar la submission
+
+inTRAIN <- createDataPartition(
+  y = TRAIN$Pobre,  
+  p = 0.7,          # 70% of the data for training
+  list = FALSE      
+)
+
+# sub_train (70%) and sub_test (30%)
+sub_TRAIN <- TRAIN[inTRAIN, ]
+sub_TEST  <- TRAIN[-inTRAIN, ]
+
+# Verificar la proporción de "Pobre" en las submuestras
+prop.table(table(TRAIN$Pobre))
+prop.table(table(sub_TRAIN$Pobre))
+prop.table(table(sub_TEST$Pobre))
+
+#Modelo 2: LDA 
+
+#Modelo para predecir
+
+modelo_lda1=Pobre~Nper+num_ocupados+arrienda+num_menores+num_mayores+maxEducLevel+Jefe_H_mujer+Jefe_desocupado+Jefe_regimen_salud+Jefe_Tipo_primer_empleo+Jefe_segundo_empleo+Jefe_H_edad
+
+
+modelo2_lda_sub <- train(modelo_lda1, 
+                        data = sub_TRAIN, 
+                        method = "lda",          
+                        metric = "F",             
+                        trControl = ctrl)
+
+modelo2_lda_sub
+
+# Predecir las propabilidades en el sub_TEST 3
+
+TEST_preds <- predict(modelo2_lda_sub, newdata = sub_TEST, type = "raw")
+
+# F1 score fuera de muestra
+
+f1_score <- calculate_f1(true_labels = sub_TEST$Pobre, predicted_labels = TEST_preds)
+print(paste("F1-score LDA:", f1_score))  #0.5564
+
+#Ahora preparamos para utilizar toda TRAIN data
+
+modelo2_lda <- train(modelo_lda1, 
+                    data = TRAIN, 
+                    method = "lda",          
+                    metric = "F",             
+                    trControl = ctrl)
+
+modelo2_lda
+
+# Preparamos los datos para hacer la submission
+
+predictSample <- TEST   %>% 
+  mutate(pobre_lab = predict(modelo2_lda, newdata = TEST, type = "raw")) %>% 
+  select(id,pobre_lab)
+
+head(predictSample)
+
+
+predictSample<- predictSample %>% 
+  mutate(pobre_lab=ifelse(pobre_lab=="Yes",1,0)) %>% 
+  select(id,pobre_lab)
+
+head(predictSample)
+
+name<- paste0("C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 2/Data/submissions/02_LDA.csv") 
+write.csv(predictSample,name, row.names = FALSE)
