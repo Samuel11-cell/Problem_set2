@@ -15,6 +15,45 @@ prop.table(table(TRAIN$Pobre))
 prop.table(table(sub_TRAIN$Pobre))
 prop.table(table(sub_TEST$Pobre))
 
+
+# Se crea una función para calcular el F1 Score
+
+calculate_f1 <- function(true_labels, predicted_labels) {
+  
+  confusion <- confusionMatrix(as.factor(predicted_labels), as.factor(true_labels))$table
+  
+  TP <- confusion[2, 2]  
+  FP <- confusion[1, 2]  
+  FN <- confusion[2, 1]  
+  
+  # Calculate precision and recall
+  precision <- TP / (TP + FP)
+  recall <- TP / (TP + FN)
+  
+  # Calculate F1-score
+  f1 <- 2 * (precision * recall) / (precision + recall)
+  
+  return(f1)
+}
+
+#Ahora creamos una función que nos permita ajustar el F1 de manera manual para diferentes umbrales en caso de que los queramos cambiar.
+
+calculate_f1_manual <- function(threshold, true_labels, predicted_probs) {
+  preds <- ifelse(predicted_probs >= threshold, "Yes", "No")
+  
+  confusion <- confusionMatrix(as.factor(preds), as.factor(true_labels))$table
+  
+  TP <- confusion[2,2]
+  FP <- confusion[1,2]
+  FN <- confusion[2,1]
+  
+  precision <- TP / (TP + FP)
+  recall <- TP / (TP + FN)
+  
+  f1 <- 2 * (precision * recall) / (precision + recall)
+  return(f1)
+}
+
 #Modelo 2: LDA 
 
 #Modelo para predecir
