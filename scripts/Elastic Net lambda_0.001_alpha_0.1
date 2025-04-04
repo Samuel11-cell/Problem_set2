@@ -1,0 +1,62 @@
+#Modelo 3: Elastic Net
+
+#Grid de combinaciones
+
+grid_EN <- expand.grid(
+  alpha = seq(0.1, 1, length = 5),    
+  lambda = 10^seq(-2, 1, length = 5)) 
+
+#Modelo para predecir
+
+modelo_EN1=Pobre~Nper+num_ocupados+arrienda+num_menores+num_mayores+maxEducLevel+Jefe_regimen_salud+Jefe_Tipo_primer_empleo+Jefe_segundo_empleo+Jefe_H_edad
+
+
+modelo3_en_sub <- train(modelo_EN1, 
+                         data = sub_TRAIN, 
+                        method = "glmnet",        # Elastic Net method
+                        metric = "F",             # F1-score as metric
+                        trControl = ctrl,         # Control setup
+                        tuneGrid = grid_EN) # Hyperparameter grid
+
+
+modelo3_en_sub
+
+# Predecir las propabilidades en el sub_TEST 
+
+TEST_preds <- predict(modelo3_en_sub, newdata = sub_TEST, type = "raw")
+
+# F1 score fuera de muestra
+
+f1_score <- calculate_f1(true_labels = sub_TEST$Pobre, predicted_labels = TEST_preds)
+print(paste("F1-score Elastic Net:", f1_score))  #0.5564
+
+#Ahora preparamos para utilizar toda TRAIN data
+
+set.seed(096325)
+modelo3_en <- train(modelo_EN1, 
+                        data = TRAIN, 
+                        method = "glmnet",        # Elastic Net method
+                        metric = "F",             # F1-score as metric
+                        trControl = ctrl,         # Control setup
+                        tuneGrid = grid_EN) # Hyperparameter grid
+
+
+modelo3_en
+
+# Preparamos los datos para hacer la submission
+
+predictSample <- TEST %>% 
+  mutate(pobre_lab = predict(modelo3_en, newdata = TEST, type = "raw")) %>% 
+  select(id, pobre_lab)
+
+head(predictSample)
+
+predictSample <- predictSample %>% 
+  mutate(pobre_lab = ifelse(pobre_lab == "Yes", 1, 0)) %>% 
+  select(id, pobre_lab)
+
+head(predictSample)
+
+
+name<- paste0("C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 2/Data/submissions/EN_lambda_0_001_alpha_0_1.csv") 
+write.csv(predictSample,name, row.names = FALSE)
