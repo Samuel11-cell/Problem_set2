@@ -1,0 +1,101 @@
+#Crear submuestras con el fin de poder hacer la validación cruzada en el mismo código antes de mandar la submission
+
+inTRAIN <- createDataPartition(
+  y = TRAIN$Pobre,  
+  p = 0.7,          # 70% of the data for training
+  list = FALSE      
+)
+
+# sub_train (70%) and sub_test (30%)
+sub_TRAIN <- TRAIN[inTRAIN, ]
+sub_TEST  <- TRAIN[-inTRAIN, ]
+
+# Verificar la proporción de "Pobre" en las submuestras
+prop.table(table(TRAIN$Pobre))
+prop.table(table(sub_TRAIN$Pobre))
+prop.table(table(sub_TEST$Pobre))
+
+
+#Modelo 6: Random Forest ajustando threshold - umbral con SMOTE 
+
+#OJO: Acá se pone el método de sampling de SMOTE que sirve para el modelo
+
+ctrl_smote <- trainControl(method = "cv",
+                           number = 5,                  
+                           classProbs = TRUE,           
+                           summaryFunction = prSummary,
+                           savePredictions = TRUE,      
+                           verboseIter = TRUE,
+                           sampling = "smote")
+#Modelo 7: XGBosst
+
+#Se plantea el grid en el que se va a mover el modelo
+
+grid_xg <- expand.grid(
+  nrounds = 200,         
+  max_depth = c(4, 6),            
+  eta = c(0.05, 0.2),            
+  gamma = c(0,1),                     
+  colsample_bytree = 0.8,         
+  min_child_weight = 10,         
+  subsample = 0.8               
+)
+
+#Modelo que se va a utilizar para entrenar
+
+modelo_XGB1=Pobre~Nper+num_ocupados+arrienda+num_menores+num_mayores+maxEducLevel+Jefe_regimen_salud+Jefe_Tipo_primer_empleo+Jefe_segundo_empleo+Jefe_H_edad
+
+
+#Entrear el mdoelo con los subdatos de TRAIN
+
+modelo7_xgb_sub <- train(modelo_XGB1, 
+                        data = sub_TRAIN, 
+                        method = "xgbTree",        
+                        metric = "F",               
+                        trControl = ctrl,       
+                        tuneGrid = grid_xg,  
+                        nthread = 4)              
+
+modelo7_xgb_sub
+
+
+# Predecimos ahora en el sub_TEST
+test_preds <- predict(modelo7_xgb_sub, newdata = sub_TEST, type = "raw")
+
+# F1 score out of sample
+f1_score <- calculate_f1(true_labels = sub_TEST$Pobre, predicted_labels = test_preds)
+print(paste("F1-score XGBoost:", f1_score))  #0.5825
+
+
+#Ahora pasasmos a entrenarlo con toda la base TRAIN
+
+set.seed(66542312)
+
+modelo7_xgb <- train(modelo_XGB1, 
+                         data = TRAIN, 
+                         method = "xgbTree",        
+                         metric = "F",               
+                         trControl = ctrl,       
+                         tuneGrid = grid_xg,  
+                         nthread = 4)              
+
+modelo7_xgb
+
+#Preparamos la submission
+
+
+
+predictSample <- TEST %>% 
+  mutate(pobre_lab = predict(modelo7_xgb, newdata = TEST, type = "raw")) %>% 
+  select(id, pobre_lab)
+
+head(predictSample)
+
+predictSample <- predictSample %>% 
+  mutate(pobre_lab = ifelse(pobre_lab == "Yes", 1, 0)) %>% 
+  select(id, pobre_lab)
+
+head(predictSample)
+
+name <- paste0("C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 2/Data/submissions/XGB_eta_0.2_gamma_0_n200.csv") 
+write.csv(predictSample, name, row.names = FALSE)
