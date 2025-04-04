@@ -1,0 +1,105 @@
+#Crear submuestras con el fin de poder hacer la validación cruzada en el mismo código antes de mandar la submission
+
+inTRAIN <- createDataPartition(
+  y = TRAIN$Pobre,  
+  p = 0.7,          # 70% of the data for training
+  list = FALSE      
+)
+
+# sub_train (70%) and sub_test (30%)
+sub_TRAIN <- TRAIN[inTRAIN, ]
+sub_TEST  <- TRAIN[-inTRAIN, ]
+
+# Verificar la proporción de "Pobre" en las submuestras
+prop.table(table(TRAIN$Pobre))
+prop.table(table(sub_TRAIN$Pobre))
+prop.table(table(sub_TEST$Pobre))
+
+
+
+
+
+#Modelo 9 XGBoost con umbral ajustado y SMOTE. 
+
+#Se plantea el grid en el que se va a mover el modelo
+
+grid_xg <- expand.grid(
+  nrounds = 200,         
+  max_depth = 6,            
+  eta = 0.05,            
+  gamma = 0,                     
+  colsample_bytree = 0.8,         
+  min_child_weight = 10,         
+  subsample = 0.8               
+)
+
+#Modelo que se va a utilizar para entrenar
+
+modelo_XGB1=Pobre~Nper+num_ocupados+arrienda+num_menores+num_mayores+maxEducLevel+Jefe_regimen_salud+Jefe_Tipo_primer_empleo+Jefe_segundo_empleo+Jefe_H_edad
+
+
+#Entrear el mdoelo con los subdatos de TRAIN
+
+modelo9_xgb_sub <- train(modelo_XGB1, 
+                         data = sub_TRAIN, 
+                         method = "xgbTree",        
+                         metric = "F",               
+                         trControl = ctrl_smote,       
+                         tuneGrid = grid_xg,  
+                         nthread = 4)              
+
+modelo9_xgb_sub
+
+# Predecimos ahora en el sub_TEST
+test_probs <- predict(modelo9_xgb_sub, newdata = sub_TEST, type = "prob")[, "Yes"]
+
+#Buscamos el umbral que maximise F1 
+umbrales <- seq(0.05, 0.95, by = 0.01)  
+f1_scores <- sapply(umbrales, calculate_f1_manual, true_labels = sub_TEST$Pobre, predicted_probs = test_probs)
+
+# Encontramos ese umbral
+
+umbral_optimo <- umbrales[which.max(f1_scores)]
+f1_optimo <- max(f1_scores)
+
+print(paste("Umbral Optimo:", umbral_optimo))       # 0.47
+print(paste("F1 optimo de acuerdo a umbral:", f1_optimo))  # 0.628
+
+# Entrenamos el modelo ahora con toda la muestra
+
+set.seed(56856)
+
+modelo9_xgb <- train(modelo_XGB1, 
+                     data = TRAIN, 
+                     method = "xgbTree",        
+                     metric = "F",               
+                     trControl = ctrl_smote,       
+                     tuneGrid = grid_xg,  
+                     nthread = 4)              
+
+modelo9_xgb
+
+# Se prepara la Submission
+
+#Ajustar las probabilidades y el umbral para la submission
+
+test_probs <- predict(modelo9_xgb, newdata = TEST, type = "prob")[, "Yes"]
+
+test_preds_fin <- ifelse(test_probs >= umbral_optimo, "Yes", "No")
+
+#Ahora la submission
+
+predictSample <- TEST %>% 
+  mutate(pobre_lab = predict(modelo9_xgb, newdata = TEST, type = "raw")) %>% 
+  select(id, pobre_lab)
+
+predictSample <- predictSample %>% 
+  mutate(pobre_lab = ifelse(pobre_lab == "Yes", 1, 0)) %>% 
+  select(id, pobre_lab)
+
+head(predictSample)
+
+name <- paste0("C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 2/Data/submissions/XGBajust_smote_eta_0.05_gamma_0_n200.csv") 
+write.csv(predictSample, name, row.names = FALSE)
+
+
