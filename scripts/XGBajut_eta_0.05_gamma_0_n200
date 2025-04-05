@@ -123,8 +123,8 @@ test_preds_fin <- ifelse(test_probs >= umbral_optimo, "Yes", "No")
 
 #Ahora la submission
 
-predictSample <- TEST %>% 
-  mutate(pobre_lab = predict(modelo8_xgb, newdata = TEST, type = "raw")) %>% 
+predictSample <- TEST %>%
+  mutate(pobre_lab = test_preds_fin) %>%
   select(id, pobre_lab)
 
 predictSample <- predictSample %>% 
@@ -133,5 +133,5 @@ predictSample <- predictSample %>%
 
 head(predictSample)
 
-name <- paste0("C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 2/Data/submissions/XGBajut_eta_0.05_gamma_0_n200.csv") 
+name <- paste0("C:/Users/claud/OneDrive/Documents/OneDrive - Universidad de los andes/Universidad Los andes/Noveno semestre/Big data/taller 2/Data/submissions/XGBajust_eta_0_05_gamma_0_n200.csv") 
 write.csv(predictSample, name, row.names = FALSE)
